@@ -1,93 +1,106 @@
 import { Request, Response } from "express";
 import { validate } from "class-validator";
-import AppDataSource from "../database/connection";
-import { Product } from "../entities/Product.entity";
-import { Repository } from "typeorm";
+import { ProductRepository } from "@/repositories/product.repository";
+import { CreateProductDto, UpdateProductDto } from "@/dto/product.dto";
 
 class ProductController {
-  private productRepository: Repository<Product>;
+  private productRepository: ProductRepository;
 
   constructor() {
-    this.productRepository = AppDataSource.getRepository(Product);
+    this.productRepository = new ProductRepository();
   }
 
-  async findAll(request: Request, response: Response): Promise<Response> {
-    const products = await this.productRepository.find();
+  findAll = async (request: Request, response: Response): Promise<Response> => {
+    const products = await this.productRepository.findAll();
 
     return response.status(200).send({
       data: products,
     });
-  }
+  };
 
-  async create(request: Request, response: Response): Promise<Response> {
-    const { name, description, weight } = request.body;
+  create = async (request: Request, response: Response): Promise<Response> => {
+    const { name, description, weight, price } = request.body;
 
-    const product = new Product();
-    product.name = name;
-    product.price = description;
-    product.weight = weight;
+    const createProductDto = new CreateProductDto();
+    createProductDto.name = name;
+    createProductDto.price = price;
+    createProductDto.weight = weight;
+    createProductDto.description = description;
 
-    const errors = await validate(product);
+    const errors = await validate(createProductDto);
+    if (errors.length > 0) {
+      return response.status(422).send({
+        errors,
+      });
+    }
+
+    const newProduct = await this.productRepository.create(createProductDto);
+    return response.status(201).send({
+      data: newProduct,
+    });
+  };
+
+  findById = async (
+    request: Request,
+    response: Response
+  ): Promise<Response> => {
+    const id: string = request.params.id;
+
+    const product = await this.productRepository.findById(id);
+
+    return response.status(200).send({
+      data: product,
+    });
+  };
+
+  update = async (request: Request, response: Response): Promise<Response> => {
+    const id: string = request.params.id;
+    const { name, description, weight, price } = request.body;
+
+    const updateProductDto = new UpdateProductDto();
+
+    updateProductDto.id = id;
+    updateProductDto.name = name;
+    updateProductDto.price = price;
+    updateProductDto.weight = weight;
+    updateProductDto.description = description;
+
+    const errors = await validate(updateProductDto);
     if (errors.length > 0)
       return response.status(422).send({
         errors,
       });
 
-    const newProduct = await this.productRepository.save(product);
-    return response.status(201).send({
-      data: newProduct,
-    });
-  }
-
-  async findById(request: Request, response: Response): Promise<Response> {
-    const id: string = request.params.id;
-
-    const product = await this.productRepository.findOneBy({ id });
-
-    return response.status(200).send({
-      data: product,
-    });
-  }
-
-  async update(request: Request, response: Response): Promise<Response> {
-    const id: string = request.params.id;
-    const { name, description, weight } = request.body;
-
     try {
-      let product = await this.productRepository.findOneByOrFail({ id });
-      product.name = name;
-      product.price = description;
-      product.weight = weight;
+      const updateProduct = await this.productRepository.update(updateProductDto);
 
-      const errors = await validate(product);
-      if (errors.length > 0)
-        return response.status(422).send({
-          errors,
+      if (!updateProduct) {
+        return response.status(404).send({
+          error: "Product not found",
         });
-
-      const updateProduct = await this.productRepository.update(id, product);
+      }
       return response.status(200).send({
         data: updateProduct,
       });
     } catch (error) {
-      return response.status(404).send({
-        error: "Product not found",
+      return response.status(500).send({
+        error: 'Internal Server Error'
       });
     }
-  }
+  };
 
-  async delete(request: Request, response: Response): Promise<Response> {
+  delete = async (request: Request, response: Response): Promise<Response> => {
     const id: string = request.params.id;
 
     try {
-      const deleteProduct = await this.productRepository.delete(id);
+      await this.productRepository.delete(id);
       return response.status(204).send({});
     } catch (error) {
       return response.status(404).send({
         error: "Product not found",
       });
     }
-  }
+  };
 }
 
 export default new ProductController();
